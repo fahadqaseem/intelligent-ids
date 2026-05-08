@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NIDS K-Means Clustering Visualizer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #080c12;
+    --surface: #0e1420;
+    --surface2: #141c2e;
+    --border: rgba(99,179,237,0.12);
+    --accent: #38bdf8;
+    --accent2: #818cf8;
+    --text: #e2e8f0;
+    --text-muted: #64748b;
+    --text-dim: #94a3b8;
+    --sidebar-w: 280px;
+    --c0: #f472b6;
+    --c1: #fb923c;
+    --c2: #4ade80;
+    --c3: #38bdf8;
+    --normal: #4ade80;
+    --attack: #f87171;
+  }
+  .light {
+    --bg: #f0f4fa;
+    --surface: #ffffff;
+    --surface2: #e8eef8;
+    --border: rgba(30,64,175,0.12);
+    --accent: #2563eb;
+    --accent2: #7c3aed;
+    --text: #0f172a;
+    --text-muted: #94a3b8;
+    --text-dim: #475569;
+    --c0: #db2777;
+    --c1: #ea580c;
+    --c2: #16a34a;
+    --c3: #0284c7;
+    --normal: #16a34a;
+    --attack: #dc2626;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+    transition: background 0.4s, color 0.4s;
+  }
+
+  /* SIDEBAR */
+  #sidebar {
+    width: var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow-y: auto;
+    flex-shrink: 0;
+    transition: background 0.4s, border-color 0.4s;
+    z-index: 10;
+  }
+  #sidebar::-webkit-scrollbar { width: 4px; }
+  #sidebar::-webkit-scrollbar-track { background: transparent; }
+  #sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .sidebar-header {
+    padding: 20px 18px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-header .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 13px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .sidebar-header .subtitle {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+  }
+
+  .stat-section {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .stat-section-title {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+
+  .pca-stat {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .pca-label { font-size: 11px; color: var(--text-dim); }
+  .pca-val { font-size: 13px; font-weight: 700; color: var(--accent); }
+
+  .pca-bar-wrap { margin-top: 6px; }
+  .pca-bar-label { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); margin-bottom: 4px; }
+  .pca-bar { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; margin-bottom: 6px; }
+  .pca-bar-fill { height: 100%; border-radius: 3px; transition: width 1s ease; }
+
+  .cluster-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    transition: background 0.4s;
+  }
+  .cluster-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .cluster-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .cluster-name { font-size: 11px; font-weight: 700; color: var(--text); }
+  .cluster-total { margin-left: auto; font-size: 11px; color: var(--text-dim); }
+
+  .mini-bar-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .mini-bar-label { font-size: 9px; color: var(--text-muted); width: 48px; }
+  .mini-bar { flex: 1; height: 4px; background: var(--surface); border-radius: 2px; overflow: hidden; }
+  .mini-bar-fill { height: 100%; border-radius: 2px; }
+  .mini-bar-val { font-size: 9px; color: var(--text-dim); width: 36px; text-align: right; }
+
+  .attack-rate {
+    font-size: 10px;
+    font-weight: 600;
+    margin-top: 6px;
+  }
+
+  .overall-stat {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .overall-pill {
+    flex: 1;
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 10px 8px;
+    text-align: center;
+    border: 1px solid var(--border);
+  }
+  .overall-pill-val { font-size: 15px; font-weight: 700; }
+  .overall-pill-label { font-size: 9px; color: var(--text-muted); margin-top: 2px; letter-spacing: 0.08em; }
+
+  .silhouette-row {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .silhouette-label { font-size: 10px; color: var(--text-dim); }
+  .silhouette-val { font-size: 16px; font-weight: 700; color: var(--accent2); }
+  .silhouette-grade { font-size: 9px; color: var(--text-muted); }
+
+  /* MAIN */
+  #main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* TOP BAR */
+  #topbar {
+    height: 52px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 12px;
+    flex-shrink: 0;
+    transition: background 0.4s;
+  }
+
+  .view-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 3px;
+  }
+  .tab-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .tab-btn.active {
+    background: var(--accent);
+    color: #fff;
+  }
+  .tab-btn:hover:not(.active) { color: var(--text); }
+
+  #topbar .spacer { flex: 1; }
+
+  .animate-btn {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none;
+    color: #fff;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 8px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .animate-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+  .animate-btn:active { transform: translateY(0); }
+  .animate-btn .icon { font-size: 13px; }
+
+  .theme-btn {
+    width: 36px; height: 36px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    transition: all 0.2s;
+    color: var(--text);
+  }
+  .theme-btn:hover { border-color: var(--accent); }
+
+  /* CANVAS */
+  #canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+  #three-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  /* LEGEND */
+  #legend {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 10px;
+    min-width: 140px;
+    transition: background 0.4s;
+  }
+  .legend-title {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .legend-dot {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* TOOLTIP */
+  #tooltip {
+    position: absolute;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    max-width: 200px;
+    z-index: 100;
+  }
+  #tooltip.visible { opacity: 1; }
+  .tt-row { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 3px; }
+  .tt-key { color: var(--text-muted); }
+  .tt-val { font-weight: 700; }
+
+  /* AXIS LABELS */
+  .axis-label {
+    position: absolute;
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    pointer-events: none;
+    letter-spacing: 0.05em;
+  }
+
+  /* ROTATE HINT */
+  #hint {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.06em;
+    pointer-events: none;
+  }
+
+  /* ANIMATION STATUS */
+  #anim-status {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: 20px;
+    padding: 5px 16px;
+    font-size: 10px;
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  #anim-status.visible { opacity: 1; }
+</style>
+</head>
+<body class="dark">
+
+<aside id="sidebar">
+  <div class="sidebar-header">
+    <div class="logo">NIDS Visualizer</div>
+    <div class="subtitle">CSC 5800 // K-Means + PCA Analysis</div>
+  </div>
+
+  <!-- PCA Variance -->
+  <div class="stat-section">
+    <div class="stat-section-title">PCA Variance Explained</div>
+    <div class="pca-bar-wrap">
+      <div class="pca-bar-label"><span>PC1</span><span>42.2%</span></div>
+      <div class="pca-bar"><div class="pca-bar-fill" style="width:42.2%; background: var(--accent);"></div></div>
+      <div class="pca-bar-label"><span>PC2</span><span>26.0%</span></div>
+      <div class="pca-bar"><div class="pca-bar-fill" style="width:26%; background: var(--accent2);"></div></div>
+      <div class="pca-bar-label"><span>PC3 (est.)</span><span>~31.8%</span></div>
+      <div class="pca-bar"><div class="pca-bar-fill" style="width:31.8%; background: var(--text-muted);"></div></div>
+    </div>
+    <div style="margin-top:8px;">
+      <div class="pca-stat">
+        <span class="pca-label">Total captured</span>
+        <span class="pca-val">68.2%</span>
+      </div>
+      <div class="pca-stat">
+        <span class="pca-label">Components used</span>
+        <span class="pca-val">2 / n</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overall Stats -->
+  <div class="stat-section">
+    <div class="stat-section-title">Dataset Overview</div>
+    <div class="overall-stat">
+      <div class="overall-pill">
+        <div class="overall-pill-val" style="color:var(--text)">51,535</div>
+        <div class="overall-pill-label">Total</div>
+      </div>
+      <div class="overall-pill">
+        <div class="overall-pill-val" style="color:var(--normal)">18,600</div>
+        <div class="overall-pill-label">Normal</div>
+      </div>
+      <div class="overall-pill">
+        <div class="overall-pill-val" style="color:var(--attack)">32,935</div>
+        <div class="overall-pill-label">Attack</div>
+      </div>
+    </div>
+    <div class="silhouette-row">
+      <div>
+        <div class="silhouette-label">Attack/Normal Ratio</div>
+        <div class="silhouette-grade">63.9% of traffic is malicious</div>
+      </div>
+      <div class="silhouette-val" style="color:var(--attack)">1.77x</div>
+    </div>
+    <div class="silhouette-row">
+      <div>
+        <div class="silhouette-label">Silhouette Score (est.)</div>
+        <div class="silhouette-grade">Moderate cluster separation</div>
+      </div>
+      <div class="silhouette-val">0.41</div>
+    </div>
+  </div>
+
+  <!-- Cluster Cards -->
+  <div class="stat-section">
+    <div class="stat-section-title">Cluster Breakdown (K=4)</div>
+
+    <div class="cluster-card">
+      <div class="cluster-card-header">
+        <div class="cluster-dot" style="background:var(--c0)"></div>
+        <div class="cluster-name">Cluster 0</div>
+        <div class="cluster-total">23,505 pts</div>
+      </div>
+      <div class="mini-bar-row">
+        <div class="mini-bar-label">Normal</div>
+        <div class="mini-bar"><div class="mini-bar-fill" style="width:7.8%; background:var(--normal)"></div></div>
+        <div class="mini-bar-val">1,840</div>
+      </div>
+      <div class="mini-bar-row">
+        <div class="mini-bar-label">Attack</div>
+        <div class="mini-bar"><div class="mini-bar-fill" style="width:92.2%; background:var(--attack)"></div></div>
+        <div class="mini-bar-val">21,665</div>
+      </div>
+      <div class="attack-rate" style="color:var(--attack)">Attack rate: 92.2% — HIGH RISK</div>
+    </div>
+
+    <div class="cluster-card">
+      <div class="cluster-card-header">
+        <div class="cluster-dot" style="background:var(--c1)"></div>
+        <div class="cluster-name">Cluster 1</div>
+        <div class="cluster-total">5,606 pts</div>
+      </div>
+      <div class="mini-bar-row">
+        <div class="mini-bar-label">Normal</div>
+        <div class="mini-bar"><div class="mini-bar-fill" style="width:22.6%; background:var(--normal)"></div></div>
+        <div class="mini-bar-val">1,269</div>
+      </div>
+      <div class="mini-bar-row">
+        <div class="mini-bar-label">Attack</div>
+        <div class="mini-bar"><div class="mini-bar-fill" style="width:77.4%; background:var(--attack)"></div></div>
+        <div class="mini-bar-val">4,337</div>
+      </div>
+      <div class="attack-rate" style="color:var(--attack)">Attack rate: 77.4% — HIGH RISK</div>
+    </div>
+
+    <div class="cluster-card">
+      <div class="cluster-card-header">
+        <div class="cluster-dot" style="background:var(--c2)"></div>
+        <div class="cluster-name">Cluster 2</div>
+        <div class="cluster-total">10,294 pts</div>
+      </div>
+      <div class="mini-bar-row">
+        <div class="mini-bar-label">Normal</div>
+        <div class="mini-bar"><div class="mini-bar-fill" style="width:33.5%; background:var(--normal)"></div></div>
+        <div class="mini-bar-val">3,450</div>
+      </div>
+      <div class="mini-bar-row">
+        <div class="mini-bar-label">Attack</div>
+        <div class="mini-bar"><div class="mini-bar-fill" style="width:66.5%; background:var(--attack)"></div></div>
+        <div class="mini-bar-val">6,844</div>
+      </div>
+      <div class="attack-rate" style="color:var(--attack)">Attack rate: 66.5% — MODERATE</div>
+    </div>
+
+    <div class="cluster-card">
+      <div class="cluster-card-header">
+        <div class="cluster-dot" style="background:var(--c3)"></div>
+        <div class="cluster-name">Cluster 3</div>
+        <div class="cluster-total">12,130 pts</div>
+      </div>
+      <div class="mini-bar-row">
+        <div class="mini-bar-label">Normal</div>
+        <div class="mini-bar"><div class="mini-bar-fill" style="width:99.3%; background:var(--normal)"></div></div>
+        <div class="mini-bar-val">12,041</div>
+      </div>
+      <div class="mini-bar-row">
+        <div class="mini-bar-label">Attack</div>
+        <div class="mini-bar"><div class="mini-bar-fill" style="width:0.7%; background:var(--attack)"></div></div>
+        <div class="mini-bar-val">89</div>
+      </div>
+      <div class="attack-rate" style="color:var(--normal)">Attack rate: 0.7% — NORMAL TRAFFIC</div>
+    </div>
+  </div>
+</aside>
+
+<div id="main">
+  <div id="topbar">
+    <div class="view-tabs">
+      <button class="tab-btn active" id="tab-kmeans" onclick="switchView('kmeans')">K-Means Clusters</button>
+      <button class="tab-btn" id="tab-true" onclick="switchView('true')">True Labels</button>
+      <button class="tab-btn" id="tab-both" onclick="switchView('both')">Side-by-Side</button>
+    </div>
+    <div class="spacer"></div>
+    <button class="animate-btn" id="animBtn" onclick="triggerAnimation()">
+      <span class="icon">◈</span> Visualize Clustering
+    </button>
+    <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Toggle theme">🌙</button>
+  </div>
+
+  <div id="canvas-wrap">
+    <canvas id="three-canvas"></canvas>
+    <div id="hint">drag to rotate  ·  scroll to zoom  ·  right-drag to pan</div>
+    <div id="anim-status">CLUSTERING IN PROGRESS...</div>
+    <div id="legend"></div>
+    <div id="tooltip"></div>
+  </div>
+</div>
+
+<script>
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+const POINT_SIZE = 0.055;
+
+const CLUSTERS = [
+  { id: 0, kColor: 0xf472b6, hex: '#f472b6', count: 380, cx: -0.58, cy: 0.38, cz: 0.08,  sx: 0.26, sy: 0.16, sz: 0.18, label: 'Cluster 0' },
+  { id: 1, kColor: 0xfb923c, hex: '#fb923c', count: 100, cx: 0.12,  cy: 0.14, cz: -0.12, sx: 0.11, sy: 0.09, sz: 0.10, label: 'Cluster 1' },
+  { id: 2, kColor: 0x4ade80, hex: '#4ade80', count: 190, cx: 0.58,  cy: -0.18, cz: -0.04, sx: 0.17, sy: 0.11, sz: 0.14, label: 'Cluster 2' },
+  { id: 3, kColor: 0x38bdf8, hex: '#38bdf8', count: 230, cx: -0.18, cy: -0.54, cz: 0.04,  sx: 0.24, sy: 0.09, sz: 0.17, label: 'Cluster 3' },
+];
+const TRUE_ATTACK_RATES = [0.922, 0.774, 0.665, 0.007];
+const NORMAL_COLOR  = 0x4ade80;
+const ATTACK_COLOR  = 0xf87171;
+
+// ─── STATE ───────────────────────────────────────────────────────────────────
+let isDark = true;
+let currentView = 'kmeans'; // 'kmeans' | 'true' | 'both'
+let animActive   = false;
+
+// Each point stores scatter pos, kmeans cluster target, true-label target
+// We keep ONE geometry per cluster for k-means colors,
+// and ONE geometry per label for true-label colors.
+// During animation we lerp the position arrays.
+
+// pointData[i] = { scatter, kTarget, tTarget (true label pos = same as kTarget but colored diff), clusterIdx, isAttack }
+let pointData = [];
+
+// Geometries we'll actually animate
+// kGeos[ci]  — cluster ci, colored kColor
+// tGeoN / tGeoA — all normals / all attacks (true label view)
+let kGeos = [], kMats = [], kMeshes = [];
+let tGeoN, tGeoA, tMatN, tMatA, tMeshN, tMeshA;
+
+// ─── RENDERER ────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('three-canvas');
+const wrap   = document.getElementById('canvas-wrap');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearColor(0x000000, 0);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
+
+// ─── AXES + GRID ─────────────────────────────────────────────────────────────
+function addAxesGrid() {
+  const lineMat = c => new THREE.LineBasicMaterial({ color: c, transparent: true, opacity: 0.35 });
+  const line = (a, b, mat) => {
+    const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...a), new THREE.Vector3(...b)]);
+    return new THREE.Line(g, mat);
+  };
+  const axMat   = lineMat(0x334155);
+  const gridMat = lineMat(0x1e293b);
+  scene.add(line([-1.5,0,0],[1.5,0,0], axMat));
+  scene.add(line([0,-1.5,0],[0,1.5,0], axMat));
+  scene.add(line([0,0,-1.5],[0,0,1.5], axMat));
+  for(let i = -1.5; i <= 1.51; i += 0.5) {
+    scene.add(line([i,-1.5,-1.5],[i,-1.5,1.5], gridMat));
+    scene.add(line([-1.5,-1.5,i],[1.5,-1.5,i], gridMat));
+  }
+}
+addAxesGrid();
+
+// ─── POINT GENERATION ────────────────────────────────────────────────────────
+function randn() {
+  let u=0,v=0;
+  while(!u) u=Math.random();
+  while(!v) v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+
+function buildPoints() {
+  pointData = [];
+
+  CLUSTERS.forEach((cl, ci) => {
+    for(let i = 0; i < cl.count; i++) {
+      const tx = cl.cx + randn()*cl.sx;
+      const ty = cl.cy + randn()*cl.sy;
+      const tz = cl.cz + randn()*cl.sz;
+      const isAttack = Math.random() < TRUE_ATTACK_RATES[ci];
+      pointData.push({
+        scatter:  new THREE.Vector3((Math.random()-0.5)*2.8, (Math.random()-0.5)*2.8, (Math.random()-0.5)*2.8),
+        kTarget:  new THREE.Vector3(tx, ty, tz),
+        clusterIdx: ci,
+        isAttack,
+      });
+    }
+  });
+}
+
+// Build Three.js meshes from current point positions
+// mode: 'scatter' | 'kmeans' | 'true'
+function buildMeshes() {
+  // Clear old
+  [kMeshes, [tMeshN, tMeshA]].flat().forEach(m => { if(m) scene.remove(m); });
+  kGeos=[]; kMats=[]; kMeshes=[];
+
+  // K-means meshes (one per cluster, starts at scatter positions)
+  CLUSTERS.forEach((cl, ci) => {
+    const pts = pointData.filter(p => p.clusterIdx === ci);
+    const arr = new Float32Array(pts.length * 3);
+    pts.forEach((p, i) => { arr[i*3]=p.scatter.x; arr[i*3+1]=p.scatter.y; arr[i*3+2]=p.scatter.z; });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    const mat = new THREE.PointsMaterial({ color: cl.kColor, size: POINT_SIZE, sizeAttenuation: true, transparent: true, opacity: 0.9 });
+    const mesh = new THREE.Points(geo, mat);
+    kGeos.push(geo); kMats.push(mat); kMeshes.push(mesh);
+  });
+
+  // True-label meshes
+  const normPts   = pointData.filter(p => !p.isAttack);
+  const attackPts = pointData.filter(p =>  p.isAttack);
+
+  const makeTrue = (pts, color) => {
+    const arr = new Float32Array(pts.length * 3);
+    pts.forEach((p, i) => { arr[i*3]=p.scatter.x; arr[i*3+1]=p.scatter.y; arr[i*3+2]=p.scatter.z; });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    const mat = new THREE.PointsMaterial({ color, size: POINT_SIZE, sizeAttenuation: true, transparent: true, opacity: 0.9 });
+    return { geo, mat, mesh: new THREE.Points(geo, mat) };
+  };
+
+  ({ geo: tGeoN, mat: tMatN, mesh: tMeshN } = makeTrue(normPts,   NORMAL_COLOR));
+  ({ geo: tGeoA, mat: tMatA, mesh: tMeshA } = makeTrue(attackPts, ATTACK_COLOR));
+}
+
+buildPoints();
+buildMeshes();
+
+// ─── ANIMATION ENGINE ─────────────────────────────────────────────────────────
+// We animate a single global 'animT' from 0→1
+// Each point interpolates scatter → target (target depends on view)
+let animT    = 0;   // 0 = fully scattered, 1 = fully clustered
+let animTo   = 0;   // destination
+let animView = 'kmeans'; // which view we're animating toward
+
+function easeInOut(t) {
+  return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+}
+
+function applyAnimT(t) {
+  const e = easeInOut(Math.max(0, Math.min(1, t)));
+
+  // Update k-means geo positions
+  CLUSTERS.forEach((cl, ci) => {
+    const pts = pointData.filter(p => p.clusterIdx === ci);
+    const arr = kGeos[ci].attributes.position.array;
+    pts.forEach((p, i) => {
+      arr[i*3]   = p.scatter.x + (p.kTarget.x - p.scatter.x) * e;
+      arr[i*3+1] = p.scatter.y + (p.kTarget.y - p.scatter.y) * e;
+      arr[i*3+2] = p.scatter.z + (p.kTarget.z - p.scatter.z) * e;
+    });
+    kGeos[ci].attributes.position.needsUpdate = true;
+  });
+
+  // Update true-label geo positions (same kTarget positions, different colors)
+  const normPts   = pointData.filter(p => !p.isAttack);
+  const attackPts = pointData.filter(p =>  p.isAttack);
+
+  [{ pts: normPts, geo: tGeoN }, { pts: attackPts, geo: tGeoA }].forEach(({ pts, geo }) => {
+    const arr = geo.attributes.position.array;
+    pts.forEach((p, i) => {
+      arr[i*3]   = p.scatter.x + (p.kTarget.x - p.scatter.x) * e;
+      arr[i*3+1] = p.scatter.y + (p.kTarget.y - p.scatter.y) * e;
+      arr[i*3+2] = p.scatter.z + (p.kTarget.z - p.scatter.z) * e;
+    });
+    geo.attributes.position.needsUpdate = true;
+  });
+}
+
+// Call this whenever user clicks a tab — scatter first if needed, then animate to target
+function switchView(v) {
+  // Update tab UI
+  ['kmeans','true','both'].forEach(id => {
+    document.getElementById('tab-'+id).classList.toggle('active', id === v);
+  });
+  currentView = v;
+  updateLegend(v);
+
+  // Remove everything
+  kMeshes.forEach(m => scene.remove(m));
+  scene.remove(tMeshN);
+  scene.remove(tMeshA);
+
+  if(v === 'both') {
+    // Side-by-side: add both sets, shift them
+    kMeshes.forEach(m => { m.position.set(-0.65, 0, 0); scene.add(m); });
+    tMeshN.position.set(0.65, 0, 0);
+    tMeshA.position.set(0.65, 0, 0);
+    scene.add(tMeshN); scene.add(tMeshA);
+  } else if(v === 'kmeans') {
+    kMeshes.forEach(m => { m.position.set(0,0,0); scene.add(m); });
+  } else {
+    tMeshN.position.set(0,0,0);
+    tMeshA.position.set(0,0,0);
+    scene.add(tMeshN); scene.add(tMeshA);
+  }
+
+  // Always re-scatter then animate in
+  animT  = 0;
+  applyAnimT(0); // snap to scatter
+  animTo = 1;
+  animActive = true;
+
+  const statusEl = document.getElementById('anim-status');
+  statusEl.textContent = v === 'kmeans' ? 'K-MEANS CLUSTERING...' : v === 'true' ? 'MAPPING TRUE LABELS...' : 'SIDE-BY-SIDE VIEW...';
+  statusEl.classList.add('visible');
+}
+
+function triggerAnimation() {
+  // Visualize button: toggle scatter/cluster on current view
+  if(animActive) return;
+  if(animT >= 1) {
+    // currently clustered → scatter
+    animTo = 0;
+  } else {
+    // scattered → cluster
+    animTo = 1;
+  }
+  animActive = true;
+  const statusEl = document.getElementById('anim-status');
+  statusEl.textContent = animTo === 1 ? 'VISUALIZE CLUSTERING...' : 'SCATTERING...';
+  statusEl.classList.add('visible');
+}
+
+// ─── ORBIT CONTROLS ──────────────────────────────────────────────────────────
+let isDragging = false, isRightDrag = false;
+let prevMouse  = { x: 0, y: 0 };
+let spherical  = { theta: 0.4, phi: 1.1 };
+let panOffset  = new THREE.Vector3();
+let radius     = 3.8;
+
+canvas.addEventListener('mousedown', e => {
+  isDragging  = true;
+  isRightDrag = e.button === 2;
+  prevMouse   = { x: e.clientX, y: e.clientY };
+});
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+window.addEventListener('mousemove', e => {
+  if(!isDragging) return;
+  const dx = (e.clientX - prevMouse.x) * 0.005;
+  const dy = (e.clientY - prevMouse.y) * 0.005;
+  if(isRightDrag) { panOffset.x += dx*radius*0.5; panOffset.y -= dy*radius*0.5; }
+  else { spherical.theta += dx; spherical.phi = Math.max(0.2, Math.min(Math.PI-0.2, spherical.phi-dy)); }
+  prevMouse = { x: e.clientX, y: e.clientY };
+});
+window.addEventListener('mouseup', () => { isDragging = false; });
+canvas.addEventListener('wheel', e => { radius = Math.max(1.5, Math.min(8, radius + e.deltaY * 0.005)); });
+
+let prevTouch = null;
+canvas.addEventListener('touchstart', e => { prevTouch = e.touches[0]; });
+canvas.addEventListener('touchmove', e => {
+  if(!prevTouch) return;
+  const t = e.touches[0];
+  spherical.theta += (t.clientX - prevTouch.clientX) * 0.006;
+  spherical.phi = Math.max(0.2, Math.min(Math.PI-0.2, spherical.phi - (t.clientY-prevTouch.clientY)*0.006));
+  prevTouch = t; e.preventDefault();
+}, { passive: false });
+
+function updateCamera() {
+  const x = radius * Math.sin(spherical.phi) * Math.sin(spherical.theta);
+  const y = radius * Math.cos(spherical.phi);
+  const z = radius * Math.sin(spherical.phi) * Math.cos(spherical.theta);
+  camera.position.set(x+panOffset.x, y+panOffset.y, z+panOffset.z);
+  camera.lookAt(panOffset.x, panOffset.y, panOffset.z);
+}
+
+// ─── RENDER LOOP ─────────────────────────────────────────────────────────────
+const ANIM_SPEED = 1.1; // units/sec
+let lastTime = 0;
+
+function animate(time) {
+  requestAnimationFrame(animate);
+  const dt = Math.min((time - lastTime) / 1000, 0.05);
+  lastTime = time;
+
+  if(!isDragging) spherical.theta += 0.0015;
+  updateCamera();
+
+  if(animActive) {
+    const dir = animTo > animT ? 1 : -1;
+    animT += dir * dt * ANIM_SPEED;
+    if(dir === 1 && animT >= 1) { animT = 1; animActive = false; document.getElementById('anim-status').classList.remove('visible'); }
+    if(dir === -1 && animT <= 0) { animT = 0; animActive = false; document.getElementById('anim-status').classList.remove('visible'); }
+    applyAnimT(animT);
+  }
+
+  renderer.render(scene, camera);
+}
+
+// ─── RESIZE ──────────────────────────────────────────────────────────────────
+function onResize() {
+  const w = wrap.clientWidth, h = wrap.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', onResize);
+onResize();
+
+// ─── LEGEND ──────────────────────────────────────────────────────────────────
+function updateLegend(v) {
+  const leg = document.getElementById('legend');
+  if(v === 'kmeans') {
+    leg.innerHTML = `<div class="legend-title">K-Means Clusters</div>` +
+      CLUSTERS.map(cl => `<div class="legend-item"><div class="legend-dot" style="background:${cl.hex}"></div>${cl.label}</div>`).join('');
+  } else if(v === 'true') {
+    leg.innerHTML = `<div class="legend-title">True Labels</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#4ade80"></div>Normal</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f87171"></div>Attack</div>`;
+  } else {
+    leg.innerHTML = `<div class="legend-title">Side-by-Side</div>
+      <div class="legend-item"><div style="width:9px;height:9px;border-radius:2px;background:linear-gradient(135deg,#f472b6,#38bdf8);flex-shrink:0"></div>K-Means (left)</div>
+      <div class="legend-item"><div style="width:9px;height:9px;border-radius:2px;background:linear-gradient(135deg,#4ade80,#f87171);flex-shrink:0"></div>True Labels (right)</div>`;
+  }
+}
+
+// ─── THEME ───────────────────────────────────────────────────────────────────
+function toggleTheme() {
+  isDark = !isDark;
+  document.body.classList.toggle('light', !isDark);
+  document.getElementById('themeBtn').textContent = isDark ? '🌙' : '☀️';
+}
+
+// ─── START ───────────────────────────────────────────────────────────────────
+animate(0);
+switchView('kmeans');
+</script>
+</body>
+</html>
